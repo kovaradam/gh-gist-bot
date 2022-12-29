@@ -59,6 +59,17 @@ def post_comment(message):
     print(response)
 
 
+def delete_comment(comment_id: str):
+    return requests.delete(
+        f'{comments_url}/{comment_id}', headers=headers)
+
+
+# comments = requests.get(comments_url).json()
+# for comment in comments:
+#     print(f"deleting {comment['id']}")
+#     response = delete_comment(comment['id'])
+#     print(response)
+
 while True:
     print(state["last_update"])
     sys.stdout.write("$ ")

