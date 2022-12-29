@@ -17,6 +17,8 @@ except KeyError:
 parser.add_argument('gistId', help="Github gist id")
 parser.add_argument(
     '-t', '--token', help='Github personal access token, required if not specified in .env file', required=github_token is None)
+parser.add_argument('-d', '--delete', help="Delete all comments",
+                    action='store_true')
 
 args = parser.parse_args()
 
@@ -64,14 +66,14 @@ def delete_comment(comment_id: str):
         f'{comments_url}/{comment_id}', headers=headers)
 
 
-# comments = requests.get(comments_url).json()
-# for comment in comments:
-#     print(f"deleting {comment['id']}")
-#     response = delete_comment(comment['id'])
-#     print(response)
+if args.delete:
+    comments = requests.get(comments_url).json()
+    for comment in comments:
+        print(f"deleting {comment['id']}")
+        response = delete_comment(comment['id'])
+        print(response)
 
 while True:
-    print(state["last_update"])
     sys.stdout.write("$ ")
     sys.stdout.flush()
     command = sys.stdin.readline().strip()
