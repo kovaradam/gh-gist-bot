@@ -9,7 +9,15 @@ from utils import create_markdown_comment, get_comment_text, get_markdown_timest
 
 parser = argparse.ArgumentParser(
     prog='controller.py',
-    description='Bot controller script, connect to given gist channel and send commands'
+    description='Bot controller script, connect to given gist channel and send commands',
+    usage="""
+    "post": create comment with text and bot command
+    "command": submit a bot command - this wil create a comment and use it for all subsequent commands
+    "commands": show commands and responses
+    "bots": show active bot count
+    "comments": show gist comments
+    "exit": quit application
+    """
 )
 
 try:
