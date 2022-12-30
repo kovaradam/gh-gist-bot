@@ -1,5 +1,6 @@
 #! /bin/python3
 import argparse
+from datetime import datetime
 import sys
 import threading
 import time
@@ -20,8 +21,6 @@ except KeyError:
 parser.add_argument('gistId', help="Github gist id")
 parser.add_argument(
     '-t', '--token', help='Github personal access token, required if not specified in .env file', required=github_token is None)
-parser.add_argument(
-    '-b', '--bot-check-frequency', help='Set bot polling interval', type=int, default=20)
 parser.add_argument('-d', '--delete', help="Delete all comments",
                     action='store_true')
 
@@ -37,7 +36,8 @@ comments_url = f'{gist_url}/comments'
 headers = {"authorization": f'bearer {github_token}'}
 gist_response = requests.get(gist_url, headers=headers)
 gist = gist_response.json()
-state = {"last_update": gist['updated_at'], "bot_count": 'checking...'}
+state = {"last_update": gist['updated_at'],
+         "bot_count": 'checking...'}
 
 try:
     print(f"Channel url: {gist['url']}")
@@ -57,11 +57,8 @@ def get_comments(latest_only=False):
 def print_comments(latest_only=False, commands_only=False):
     comments = get_comments(latest_only=latest_only)
 
-    comments = filter(lambda comment: not (
-        'ping' in comment['body'] or 'pong' in comment['body']), comments)
-
     comment_cards = map(lambda comment: f"""
-    {comment['created_at']}: {comment['user']['login']}[{comment['user']['id']}]> "{parse_markdown_comment(comment['body']) if commands_only else comment['body']}" """, comments)
+    {comment['updated_at']}: {comment['user']['login']}[{comment['user']['id']}]> "{parse_markdown_comment(comment['body']) if commands_only else comment['body']}" """, comments)
 
     for card in comment_cards:
         print(card)
@@ -73,6 +70,15 @@ def post_comment(message, silent=False):
     state["last_update"] = response.json()['updated_at']
     if not silent:
         print(response)
+    return response
+
+
+def update_comment(comment_id, message, silent=False):
+    response = requests.patch(
+        f'{comments_url}/{comment_id}', json={"body": message}, headers=headers)
+    if not silent:
+        print(response)
+    return response
 
 
 def delete_comment(comment_id: str):
@@ -86,17 +92,25 @@ def prompt(message="$ "):
     return sys.stdin.readline().strip()
 
 
-def check_bots():
+def ping_bots():
+    def get_message():
+        return f"{get_random_message(['Anyone got this working?','Is this up to date?'])}\n\n<!-- {datetime.now()} -->\n\n{create_markdown_comment('ping')}"
+
+    ping_comment = post_comment(
+        get_message(), silent=True).json()
+
     while True:
-        post_comment(
-            f'{get_random_message()}\n\n{create_markdown_comment("ping")}', silent=True)
-        time.sleep(args.bot_check_frequency)
-        comments = get_comments(latest_only=True)
-        commands = map(lambda comment: parse_markdown_comment(
-            comment['body']), comments)
+        time.sleep(8)
+        comments = get_comments()
+        comments = filter(
+            lambda comment: comment['updated_at'] > ping_comment['updated_at'], comments)
+        commands = map(lambda comment: (
+            parse_markdown_comment(comment['body'])), comments)
         bot_count = len(
-            list(filter(lambda command: command == 'pong', commands)))
+            list(filter(lambda command: command == 'pong', list(commands))))
         state['bot_count'] = bot_count
+        ping_comment = update_comment(
+            comment_id=ping_comment['id'], message=get_message(), silent=True).json()
 
 
 if args.delete:
@@ -107,7 +121,7 @@ if args.delete:
         print(response)
 
 bot_check_thread = threading.Thread(
-    target=check_bots, daemon=True)
+    target=ping_bots, daemon=True)
 bot_check_thread.start()
 
 while True:

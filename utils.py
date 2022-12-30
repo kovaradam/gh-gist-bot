@@ -14,7 +14,7 @@ def create_markdown_comment(text: str):
     return md_comment_sign+text+')'
 
 
-def get_random_message():
+def get_random_message(input_messages=None):
     messages = ['idk', 'Sure', 'Need a repro',
-                'Anyone got this working?', 'Second this', 'wtf']
+                'Anyone got this working?', 'Second this', 'wtf'] if input_messages is None else input_messages
     return messages[randint(0, len(messages)-1)]
