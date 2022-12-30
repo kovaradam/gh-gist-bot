@@ -20,6 +20,8 @@ except KeyError:
 parser.add_argument('gistId', help="Github gist id")
 parser.add_argument('-v', '--verbose', help="Show logs",
                     action='store_true')
+parser.add_argument('-p', '--poll-interval', help="Set polling frequency",
+                    type=int, default=5)
 parser.add_argument(
     '-t', '--token', help='Github personal access token, required if not specified in .env file', required=github_token is None)
 
@@ -162,7 +164,7 @@ def handle_command(command: str):
 
 
 while True:
-    time.sleep(5)
+    time.sleep(args.poll_interval)
     log('fetching comments')
     comments = get_latest_comments()
     if len(comments) == 0:
