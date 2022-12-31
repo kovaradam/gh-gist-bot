@@ -11,8 +11,8 @@ parser = argparse.ArgumentParser(
     prog='controller.py',
     description='Bot controller script, connect to given gist channel and send commands',
     usage="""
-    "post": create comment with text and bot command
-    "command": submit a bot command - this wil create a comment and use it for all subsequent commands
+    "post": create comment with text and bot command - this wil create a comment and use it for all subsequent commands
+    "command": submit a bot command - this wil use last command comment or create a new one with random message 
     "commands": show commands and responses
     "bots": show active bot count
     "comments": show gist comments
@@ -33,7 +33,7 @@ parser.add_argument('-d', '--delete', help="Delete all comments",
 
 args = parser.parse_args()
 
-if(github_token is None or args.token is not None):
+if (github_token is None or args.token is not None):
     github_token = args.token
 
 gist_id = args.gistId
@@ -95,7 +95,7 @@ def post_command(command):
     response = requests.get(
         f'{comments_url}/{command_comment["id"]}', headers=headers)
 
-    if(response.status_code == 404):
+    if (response.status_code == 404):
         state['command_comment'] = None
         return post_command(command)
 
@@ -128,29 +128,37 @@ def ping_bots():
 
         return f"{state['ping_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment('ping')}"
 
-    state['ping_comment'] = post_comment(get_message()).json()
-
     while True:
-        time.sleep(8)
-        ping_comment = state['ping_comment']
-        comments = get_comments()
-        comments = filter(
-            lambda comment: comment['updated_at'] > ping_comment['updated_at'], comments)
-        commands = map(lambda comment: (
-            parse_markdown_comment(comment['body'])), comments)
-        bot_count = len(
-            list(filter(lambda command: command == 'pong', list(commands))))
-        state['bot_count'] = bot_count
-        state['ping_comment'] = update_comment(
-            comment_id=ping_comment['id'], message=get_message()).json()
+        try:
+            # Wait for bots to respond
+            time.sleep(8)
+
+            ping_comment = state['ping_comment']
+            comments = get_comments()
+            comments = filter(
+                lambda comment: comment['updated_at'] > ping_comment['updated_at'], comments)
+            commands = map(lambda comment: (
+                parse_markdown_comment(comment['body'])), comments)
+            bot_count = len(
+                list(filter(lambda command: command == 'pong', list(commands))))
+            state['bot_count'] = bot_count
+            state['ping_comment'] = update_comment(
+                comment_id=ping_comment['id'], message=get_message()).json()
+        except (KeyError, TypeError):
+            # No ping comment
+            state['ping_comment'] = post_comment(get_message()).json()
+
+
+def delete_comments():
+    comments = get_comments()
+    for text in comments:
+        print(f"deleting {text['id']}")
+        response = delete_comment(text['id'])
+        print(response)
 
 
 if args.delete:
-    comments = get_comments()
-    for comment in comments:
-        print(f"deleting {comment['id']}")
-        response = delete_comment(comment['id'])
-        print(response)
+    delete_comments()
 
 threading.Thread(
     target=ping_bots, daemon=True).start()
@@ -172,10 +180,12 @@ while True:
             print_comments(latest_only=True, commands_only=True)
 
         case 'post':
-            comment = prompt("> Write comment: ")
+            text = prompt("> Write comment: ")
             command = prompt("> Submit command: ")
             response = post_comment(
-                f'{comment}\n\n{create_markdown_comment(command)}')
+                f'{text}\n\n{create_markdown_comment(command)}')
+            state['command_comment'] = response.json()
+            state['command_text'] = text
             print(response)
 
         case 'command':
@@ -185,6 +195,9 @@ while True:
 
         case 'bots':
             print(f'> bot count: {state["bot_count"]}')
+
+        case 'clear':
+            delete_comments()
         case 'exit':
             break
         case other:

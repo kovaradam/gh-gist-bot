@@ -28,7 +28,7 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-if(github_token is None or args.token is not None):
+if (github_token is None or args.token is not None):
     github_token = args.token
 
 gist_id = args.gistId
@@ -87,7 +87,7 @@ def post_command(command: str):
     response = requests.get(
         f'{comments_url}/{command_comment["id"]}', headers=headers)
 
-    if(response.status_code == 404):
+    if (response.status_code == 404):
         state['command_comment'] = None
         return post_command(command)
 
@@ -130,6 +130,16 @@ def list_to_string(input: list[str], separator=', '):
     return separator.join(map(str, input))
 
 
+def delete_comments():
+    comments = requests.get(comments_url, headers=headers).json()
+    for comment in comments:
+        comment_id = comment['id']
+        print(f"deleting {comment_id}")
+        response = requests.delete(
+            f'{comments_url}/{comment_id}', headers=headers)
+        print(response)
+
+
 def handle_command(command: str):
     log(f'Received command "{command}"')
     keys = command.split(' ')
@@ -152,6 +162,8 @@ def handle_command(command: str):
             post_command(result.decode('utf-8'))
         case 'ping':
             pong()
+        case 'clear':
+            delete_comments()
         case _:
             log('Unknown command: '+command)
             try:
