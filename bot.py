@@ -18,7 +18,7 @@ try:
 except KeyError:
     github_token = None
 
-parser.add_argument('gistId', help="Github gist id")
+parser.add_argument('gist-id', help="Github gist id")
 parser.add_argument('-v', '--verbose', help="Show logs",
                     action='store_true')
 parser.add_argument('-p', '--poll-interval', help="Set polling frequency",
@@ -32,7 +32,7 @@ args = parser.parse_args()
 if (github_token is None or args.token is not None):
     github_token = args.token
 
-gist_id = args.gistId
+gist_id = args.gist_id
 gists_url = f'https://api.github.com/gists'
 gist_url = f'{gists_url}/{gist_id}'
 comments_url = f'{gist_url}/comments'

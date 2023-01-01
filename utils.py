@@ -35,7 +35,7 @@ def parse_command(text: str, response=False):
 
 def get_random_message(input_messages=None):
     messages = ['idk', 'Sure', 'Need a repro',
-                'Anyone got this working?', 'Second this', 'wtf'] if input_messages is None else input_messages
+                'Anyone got this working?', 'Second this', 'lgtm'] if input_messages is None else input_messages
     return messages[randint(0, len(messages)-1)]
 
 

