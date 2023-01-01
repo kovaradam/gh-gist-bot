@@ -2,17 +2,17 @@ from datetime import datetime
 from random import randint
 
 
-md_comment_sign = '[//]: # ('
+md_comment_sign, md_comment_close = '<!---', '-->'
 
 
 def parse_markdown_comment(text: str):
     content_idx = text.find(md_comment_sign) + len(md_comment_sign)
-    content = text[content_idx: len(text)-1]
+    content = text[content_idx: len(text)-len(md_comment_close)]
     return content
 
 
 def create_markdown_comment(text: str):
-    return md_comment_sign+text+')'
+    return md_comment_sign+text+md_comment_close
 
 
 def get_random_message(input_messages=None):
@@ -21,11 +21,5 @@ def get_random_message(input_messages=None):
     return messages[randint(0, len(messages)-1)]
 
 
-def get_markdown_timestamp():
-
-    return f'<!-- {datetime.now()} -->'
-
-
-def get_comment_text(comment: str):
-    print(comment.find("/n/n"))
-    return comment[0:comment.find('/n/n')]
+def create_markdown_timestamp():
+    return f'[//]: # ({datetime.now()})'

