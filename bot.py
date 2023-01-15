@@ -18,7 +18,7 @@ try:
 except KeyError:
     github_token = None
 
-parser.add_argument('gist-id', help="Github gist id")
+parser.add_argument('gist_id', help="Github gist id")
 parser.add_argument('-v', '--verbose', help="Show logs",
                     action='store_true')
 parser.add_argument('-p', '--poll-interval', help="Set polling frequency",
