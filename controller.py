@@ -30,7 +30,7 @@ try:
 except KeyError:
     github_token = None
 
-parser.add_argument('gist-id', help="Github gist id")
+parser.add_argument('gist_id', help="Github gist id")
 parser.add_argument(
     '-t', '--token', help='Github personal access token, required if not specified in .env file', required=github_token is None)
 parser.add_argument('-d', '--delete', help="Delete all comments",
